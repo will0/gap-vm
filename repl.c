@@ -2,13 +2,13 @@
 #include "hash.c"
 
 void show(gap_buf *gap) {
-	printf("%d [ ", gap->start);
+	printf("%lu [ ", gap->start);
 	for(int i = 0; i < gap->start; ++i)
-		printf("%d ", gap->buffer[i]);
-	printf("> %d < ", gap->end - gap->start);
+		printf("%d ", gap_item_to_int(gap->buffer[i]));
+	printf("> %lu < ", gap->end - gap->start);
 	for(int i = gap->end; i < gap->length; ++i)
-		printf("%d ", gap->buffer[i]);
-	printf("] %d\n", gap->length - gap->end);
+		printf("%d ", gap_item_to_int(gap->buffer[i]));
+	printf("] %lu\n", gap->length - gap->end);
 }
 
 hash_table *init_mnemonics() {
@@ -24,11 +24,12 @@ hash_table *init_mnemonics() {
 		"+",
 		"-",
 		"*",
-		"/%",
-		"<!>",
+		"/%", // divmod
+		">><<", // move gap by n
+		"drop",
 	};
 	hash_table *mnem = make_hash();
-	for(int i = 0; i < 13; ++i)
+	for(int i = 0; i < 14; ++i)
 		hash_put(mnem, mnemonics[i], i);
 	return mnem;
 }

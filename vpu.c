@@ -1,14 +1,50 @@
 #include <stdlib.h>
 #include <strings.h>
+#include <stdint.h>
+#include <limits.h>
 
-typedef int gap_item;
+enum uint8_t {
+	gi_signed,
+	gi_unsigned,
+	gi_double,
+	gi_pointer,
+} gap_item_types;
+
+typedef struct gap_item {
+	union {
+		struct {
+			uint8_t type;
+		} info;
+		uint64_t _tag;
+	} tag;
+	union {
+		int64_t _signed;
+		uint64_t _unsigned;
+		double _double;
+		void *_pointer;
+	} value;
+} gap_item;
 
 gap_item gap_item_from_int(int value) {
-	return value;
+	gap_item item;
+	item.tag.info.type = gi_signed;
+	item.value._signed = value;
+	return item;
 }
 
 int gap_item_to_int(gap_item item) {
-	return item;
+	switch(item.tag.info.type) {
+		case gi_signed:
+			return (int) item.value._signed;
+		case gi_unsigned:
+			return (int) item.value._unsigned;
+		case gi_double:
+			return (int) item.value._double;
+		case gi_pointer:
+			return (int) item.value._pointer;
+		default:
+			return INT_MIN;
+	}
 }
 
 typedef struct gap_buf {
@@ -62,7 +98,7 @@ typedef struct gap_vpu {
 	gap_vpu_op userops[128];
 } gap_vpu;
 
-gap_vpu *gap_vpu_create(gap_vpu_op builtins[128], gap_vpu_op userops[128], gap_buf *gap) {
+gap_vpu *gap_vpu_create(const gap_vpu_op builtins[128], const gap_vpu_op userops[128], gap_buf *gap) {
 	gap_vpu *vpu = calloc(sizeof(gap_vpu), 1);
 	vpu->gap = gap;
 	memmove(vpu->builtins, builtins, sizeof(gap_vpu_op) * 128);
@@ -180,6 +216,19 @@ void gap_bi_warp_rel(gap_vpu *vpu) {
 	}
 }
 
+void gap_bi_drop(gap_vpu *vpu) {
+	VPU_REQUIRE_GAP(vpu, 1, 0, 0);
+	popl_gap_buf(vpu->gap);
+}
+
+void gap_bi_pushrefl(gap_vpu *vpu) {
+	VPU_REQUIRE_GAP(vpu, 1, 1, 0);
+	gap_item item;
+	item.info.type = gi_pointer;
+	item.value._pointer = &(vpu->gap->base[vpu->gap->start - 1]);
+	pushl_gap_buf(vpu->gap, item);
+}
+
 const gap_vpu_op gap_vpu_builtins[128] = {
 	gap_bi_noop,
 
@@ -197,4 +246,5 @@ const gap_vpu_op gap_vpu_builtins[128] = {
 	gap_bi_divmod,
 
 	gap_bi_warp_rel,
+	gap_bi_drop,
 };
