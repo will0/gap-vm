@@ -7,8 +7,13 @@ enum uint8_t {
 	gi_signed,
 	gi_unsigned,
 	gi_double,
+	gi_item_handle,
 	gi_pointer,
-} gap_item_types;
+} gap_item_type;
+
+const char const *gap_item_type_format[] = {
+	"i%lld", "u%llu", "d%6e", "h%#x", "p%#x"
+};
 
 typedef struct gap_item {
 	union {
@@ -21,6 +26,7 @@ typedef struct gap_item {
 		int64_t _signed;
 		uint64_t _unsigned;
 		double _double;
+		struct gap_item *_item_handle;
 		void *_pointer;
 	} value;
 } gap_item;
@@ -40,11 +46,15 @@ int gap_item_to_int(gap_item item) {
 			return (int) item.value._unsigned;
 		case gi_double:
 			return (int) item.value._double;
-		case gi_pointer:
+		case gi_pointer: case gi_item_handle:
 			return (int) item.value._pointer;
 		default:
 			return INT_MIN;
 	}
+}
+
+int gap_item_to_cstr(char *buf, size_t len, gap_item item) {
+	return snprintf(buf, len, gap_item_type_format[item.tag.info.type], item.value);
 }
 
 typedef struct gap_buf {
@@ -224,9 +234,28 @@ void gap_bi_drop(gap_vpu *vpu) {
 void gap_bi_pushrefl(gap_vpu *vpu) {
 	VPU_REQUIRE_GAP(vpu, 1, 1, 0);
 	gap_item item;
-	item.info.type = gi_pointer;
-	item.value._pointer = &(vpu->gap->base[vpu->gap->start - 1]);
+	item.tag.info.type = gi_item_handle;
+	item.value._item_handle = &(vpu->gap->buffer[vpu->gap->start - 1]);
 	pushl_gap_buf(vpu->gap, item);
+}
+
+void gap_bi_pushrefr(gap_vpu *vpu) {
+	VPU_REQUIRE_GAP(vpu, 0, 1, 1);
+	gap_item item;
+	item.tag.info.type = gi_item_handle;
+	item.value._item_handle = &(vpu->gap->buffer[vpu->gap->end]);
+	pushl_gap_buf(vpu->gap, item);
+}
+
+void gap_bi_deref(gap_vpu *vpu) {
+	VPU_REQUIRE_GAP(vpu, 1, 0, 0);
+	gap_item item = popl_gap_buf(vpu->gap);
+	if(item.tag.info.type != gi_item_handle) {
+		pushl_gap_buf(vpu->gap, item);
+		vpu->flags = 16;
+		return;
+	}
+	pushl_gap_buf(vpu->gap, *item.value._item_handle);
 }
 
 const gap_vpu_op gap_vpu_builtins[128] = {
@@ -247,4 +276,7 @@ const gap_vpu_op gap_vpu_builtins[128] = {
 
 	gap_bi_warp_rel,
 	gap_bi_drop,
+	gap_bi_pushrefl,
+	gap_bi_pushrefr,
+	gap_bi_deref,
 };
